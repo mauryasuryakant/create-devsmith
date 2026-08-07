@@ -1,0 +1,20 @@
+{
+  "name": "create-devsmith",
+  "version": "0.1.0",
+  "description": "Scaffold projects with DevSmith",
+  "bin": {
+    "create-devsmith": "bin/index.js"
+  },
+  "files": [
+    "bin"
+  ],
+  "keywords": [
+    "scaffold",
+    "cli",
+    "starter",
+    "devsmith"
+  ],
+  "type": "module",
+  "author": "Maurya Suryakant",
+  "license": "MIT"
+}
