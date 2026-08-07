@@ -1,6 +1,6 @@
 {
   "name": "create-devsmith",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Scaffold projects with DevSmith",
   "bin": {
     "create-devsmith": "bin/index.js"
