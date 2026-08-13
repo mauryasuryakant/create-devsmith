@@ -12,12 +12,12 @@ import process from "node:process";
 // --------------------------------------------------
 
 const frontendTemplates = {
-  vue: "mauryasuryant/devsmith-templates/frontend/vue-contact-api-ts",
+  vue: "mauryasuryakant/devsmith-templates/frontend/vue-contact-api-ts",
 };
 
 const backendTemplates = {
   contactApi:
-    "mauryasuryant/devsmith-templates/backend/contact-api",
+    "mauryasuryakant/devsmith-templates/backend/contact-api",
 };
 
 // --------------------------------------------------
