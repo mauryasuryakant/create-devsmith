@@ -16,5 +16,9 @@
   ],
   "type": "module",
   "author": "Maurya Suryakant",
-  "license": "MIT"
+  "license": "MIT",
+  "dependencies": {
+    "@inquirer/prompts": "^7.8.4",
+    "degit": "^2.8.4"
+  }
 }
