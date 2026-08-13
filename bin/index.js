@@ -4,7 +4,7 @@ import { select } from "@inquirer/prompts";
 import degit from "degit";
 import path from "node:path";
 import { mkdir } from "node:fs/promises";
-import { spawn, execSync } from "node:child_process";
+import { spawn, execFileSync } from "node:child_process";
 import process from "node:process";
 
 // --------------------------------------------------
@@ -24,41 +24,98 @@ const backendTemplates = {
 // Platform Commands
 // --------------------------------------------------
 
+/*
+ * Windows exposes npm through npm.cmd.
+ *
+ * Linux/macOS use npm directly.
+ *
+ * This keeps all platform-specific package-manager
+ * handling in one place.
+ */
 const npmCommand =
   process.platform === "win32" ? "npm.cmd" : "npm";
 
 // --------------------------------------------------
-// Helpers
+// Process Management
 // --------------------------------------------------
 
+const processes = [];
+
+/**
+ * Run a command and return the child process.
+ */
 function runCommand(command, args, cwd) {
-  return spawn(command, args, {
+  const child = spawn(command, args, {
     cwd,
     stdio: "inherit",
-    shell: process.platform === "win32",
+  });
+
+  processes.push(child);
+
+  child.on("error", (error) => {
+    console.error(`\n❌ Failed to start ${command}:`);
+    console.error(error.message);
+  });
+
+  return child;
+}
+
+/**
+ * Run a command synchronously.
+ *
+ * Used for operations that must finish before
+ * Devsmith continues.
+ */
+function runCommandSync(command, args, cwd) {
+  execFileSync(command, args, {
+    cwd,
+    stdio: "inherit",
   });
 }
 
+// --------------------------------------------------
+// Browser
+// --------------------------------------------------
+
 function openBrowser(url) {
-  const commands = {
-    win32: ["cmd", ["/c", "start", "", url]],
-    darwin: ["open", [url]],
-    linux: ["xdg-open", [url]],
-  };
+  let command;
+  let args;
 
-  const commandInfo = commands[process.platform];
+  switch (process.platform) {
+    case "win32":
+      /*
+       * `start` is a CMD builtin, so Windows needs
+       * cmd.exe here specifically.
+       */
+      command = "cmd.exe";
+      args = ["/c", "start", "", url];
+      break;
 
-  if (!commandInfo) {
-    console.log(`\n🌐 Open ${url} in your browser.`);
-    return;
+    case "darwin":
+      command = "open";
+      args = [url];
+      break;
+
+    case "linux":
+      command = "xdg-open";
+      args = [url];
+      break;
+
+    default:
+      console.log(`\n🌐 Open ${url} in your browser.`);
+      return;
   }
 
-  const [command, args] = commandInfo;
-
-  spawn(command, args, {
+  const browserProcess = spawn(command, args, {
     detached: true,
     stdio: "ignore",
-  }).unref();
+  });
+
+  browserProcess.unref();
+
+  browserProcess.on("error", () => {
+    console.log(`\n🌐 Open ${url} in your browser.`);
+  });
 }
 
 // --------------------------------------------------
@@ -129,23 +186,32 @@ console.log("✓ Backend downloaded");
 // Install Dependencies
 // --------------------------------------------------
 
-console.log("\n📥 Installing frontend dependencies...\n");
+try {
+  console.log("\n📥 Installing frontend dependencies...\n");
 
-execSync(`${npmCommand} install`, {
-  cwd: frontendDir,
-  stdio: "inherit",
-});
+  runCommandSync(
+    npmCommand,
+    ["install"],
+    frontendDir
+  );
 
-console.log("\n✓ Frontend dependencies installed");
+  console.log("\n✓ Frontend dependencies installed");
 
-console.log("\n📥 Installing backend dependencies...\n");
+  console.log("\n📥 Installing backend dependencies...\n");
 
-execSync(`${npmCommand} install`, {
-  cwd: backendDir,
-  stdio: "inherit",
-});
+  runCommandSync(
+    npmCommand,
+    ["install"],
+    backendDir
+  );
 
-console.log("\n✓ Backend dependencies installed");
+  console.log("\n✓ Backend dependencies installed");
+} catch (error) {
+  console.error("\n❌ Failed to install dependencies.");
+  console.error("\nDevsmith stopped because dependency installation failed.");
+
+  process.exit(1);
+}
 
 // --------------------------------------------------
 // Start Backend
@@ -188,10 +254,13 @@ setTimeout(() => {
 function shutdown() {
   console.log("\n\n🛑 Shutting down Devsmith...\n");
 
-  backendProcess.kill();
-  frontendProcess.kill();
+  for (const child of processes) {
+    if (!child.killed) {
+      child.kill();
+    }
+  }
 
-  process.exit();
+  process.exit(0);
 }
 
 process.on("SIGINT", shutdown);
