@@ -1,97 +1,10 @@
 #!/usr/bin/env node
 
-// import { select } from "@inquirer/prompts";
-// import degit from "degit";
-// import path from "node:path";
-// import { mkdir } from "node:fs/promises";
-
-// console.log("\n⚒️  Welcome to Devsmith!\n");
-
-// // ------------------------------------------
-// // Hardcoded templates for now
-// // ------------------------------------------
-
-// const frontendTemplates = {
-//   vue: "mauryasuryakant/devsmith-templates/frontend/vue-contact-api-ts",
-// };
-
-// const backendTemplates = {
-//   contactApi: "mauryasuryakant/devsmith-templates/backend/contact-api",
-// };
-
-// // ------------------------------------------
-// // User selections
-// // ------------------------------------------
-
-// const frontend = await select({
-//   message: "Select your frontend:",
-//   choices: [
-//     {
-//       name: "Vue + TypeScript + Tailwind + shadcn",
-//       value: "vue",
-//     },
-//   ],
-// });
-
-// const backend = await select({
-//   message: "Select your backend:",
-//   choices: [
-//     {
-//       name: "Contact API",
-//       value: "contactApi",
-//     },
-//   ],
-// });
-
-// // ------------------------------------------
-// // Project directories
-// // ------------------------------------------
-
-// const root = process.cwd();
-
-// const frontendDir = path.join(root, "frontend");
-// const backendDir = path.join(root, "backend");
-
-// await mkdir(frontendDir, { recursive: true });
-// await mkdir(backendDir, { recursive: true });
-
-// // ------------------------------------------
-// // Download templates
-// // ------------------------------------------
-
-// console.log("\n📦 Downloading templates...\n");
-
-// const frontendRepo = frontendTemplates[frontend];
-// const backendRepo = backendTemplates[backend];
-
-// console.log("→ Frontend:", frontendRepo);
-
-// await degit(frontendRepo).clone(frontendDir);
-
-// console.log("✓ Frontend downloaded\n");
-
-// console.log("→ Backend:", backendRepo);
-
-// await degit(backendRepo).clone(backendDir);
-
-// console.log("✓ Backend downloaded\n");
-
-// // ------------------------------------------
-// // Done
-// // ------------------------------------------
-
-// console.log("🎉 Devsmith project created!\n");
-
-// console.log(`Frontend → ${frontendDir}`);
-// console.log(`Backend  → ${backendDir}\n`);
-
-
 import { select } from "@inquirer/prompts";
 import degit from "degit";
 import path from "node:path";
 import { mkdir } from "node:fs/promises";
-import { spawn } from "node:child_process";
-import { execSync } from "node:child_process";
+import { spawn, execSync } from "node:child_process";
 import process from "node:process";
 
 // --------------------------------------------------
@@ -99,13 +12,20 @@ import process from "node:process";
 // --------------------------------------------------
 
 const frontendTemplates = {
-  vue: "mauryasuryakant/devsmith-templates/frontend/vue-contact-api-ts",
+  vue: "mauryasuryant/devsmith-templates/frontend/vue-contact-api-ts",
 };
 
 const backendTemplates = {
   contactApi:
-    "mauryasuryakant/devsmith-templates/backend/contact-api",
+    "mauryasuryant/devsmith-templates/backend/contact-api",
 };
+
+// --------------------------------------------------
+// Platform Commands
+// --------------------------------------------------
+
+const npmCommand =
+  process.platform === "win32" ? "npm.cmd" : "npm";
 
 // --------------------------------------------------
 // Helpers
@@ -126,12 +46,14 @@ function openBrowser(url) {
     linux: ["xdg-open", [url]],
   };
 
-  const [command, args] = commands[process.platform];
+  const commandInfo = commands[process.platform];
 
-  if (!command) {
+  if (!commandInfo) {
     console.log(`\n🌐 Open ${url} in your browser.`);
     return;
   }
+
+  const [command, args] = commandInfo;
 
   spawn(command, args, {
     detached: true,
@@ -186,7 +108,7 @@ await mkdir(frontendDir, { recursive: true });
 await mkdir(backendDir, { recursive: true });
 
 // --------------------------------------------------
-// Download templates
+// Download Templates
 // --------------------------------------------------
 
 console.log("\n📦 Downloading templates...\n");
@@ -204,12 +126,12 @@ await degit(backendTemplates[backend]).clone(backendDir);
 console.log("✓ Backend downloaded");
 
 // --------------------------------------------------
-// Install dependencies
+// Install Dependencies
 // --------------------------------------------------
 
 console.log("\n📥 Installing frontend dependencies...\n");
 
-execSync("npm install", {
+execSync(`${npmCommand} install`, {
   cwd: frontendDir,
   stdio: "inherit",
 });
@@ -218,7 +140,7 @@ console.log("\n✓ Frontend dependencies installed");
 
 console.log("\n📥 Installing backend dependencies...\n");
 
-execSync("npm install", {
+execSync(`${npmCommand} install`, {
   cwd: backendDir,
   stdio: "inherit",
 });
@@ -226,31 +148,31 @@ execSync("npm install", {
 console.log("\n✓ Backend dependencies installed");
 
 // --------------------------------------------------
-// Start backend
+// Start Backend
 // --------------------------------------------------
 
 console.log("\n🚀 Starting backend...\n");
 
 const backendProcess = runCommand(
-  "npm",
+  npmCommand,
   ["run", "dev"],
   backendDir
 );
 
 // --------------------------------------------------
-// Start frontend
+// Start Frontend
 // --------------------------------------------------
 
 console.log("\n🚀 Starting frontend...\n");
 
 const frontendProcess = runCommand(
-  "npm",
+  npmCommand,
   ["run", "dev"],
   frontendDir
 );
 
 // --------------------------------------------------
-// Open browser
+// Open Browser
 // --------------------------------------------------
 
 setTimeout(() => {
