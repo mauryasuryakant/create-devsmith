@@ -13,11 +13,16 @@ import process from "node:process";
 
 const frontendTemplates = {
   vue: "mauryasuryakant/devsmith-templates/frontend/vue-contact-api-ts",
+  react: "mauryasuryakant/devsmith-templates/frontend/react-typography",
+  none: "",
+
 };
 
 const backendTemplates = {
   contactApi:
     "mauryasuryakant/devsmith-templates/backend/contact-api",
+  none: "",
+
 };
 
 // --------------------------------------------------
@@ -154,6 +159,14 @@ const frontend = await select({
       name: "Vue + TypeScript",
       value: "vue",
     },
+    {
+      name: "React + TypeScript",
+      value: "react",
+    },
+    // {
+    //   name: "None",
+    //   value: "none",
+    // },
   ],
 });
 
@@ -163,6 +176,10 @@ const backend = await select({
     {
       name: "Contact API",
       value: "contactApi",
+    },
+    {
+      name: "None",
+      value: "none",
     },
   ],
 });
