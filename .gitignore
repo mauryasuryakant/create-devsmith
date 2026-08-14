@@ -4,3 +4,4 @@ backend
 
 *.tgz
 .vscode
+test
