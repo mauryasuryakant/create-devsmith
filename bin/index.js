@@ -4,7 +4,7 @@ import { select } from "@inquirer/prompts";
 import degit from "degit";
 import path from "node:path";
 import { mkdir } from "node:fs/promises";
-import { spawn, execFileSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import process from "node:process";
 
 // --------------------------------------------------
@@ -21,16 +21,13 @@ const backendTemplates = {
 };
 
 // --------------------------------------------------
-// Platform Commands
+// Package Manager
 // --------------------------------------------------
 
 /*
- * Windows exposes npm through npm.cmd.
+ * npm is exposed as npm.cmd on Windows.
  *
- * Linux/macOS use npm directly.
- *
- * This keeps all platform-specific package-manager
- * handling in one place.
+ * On Unix-like systems it is simply npm.
  */
 const npmCommand =
   process.platform === "win32" ? "npm.cmd" : "npm";
@@ -39,38 +36,71 @@ const npmCommand =
 // Process Management
 // --------------------------------------------------
 
-const processes = [];
+const runningProcesses = [];
 
 /**
- * Run a command and return the child process.
+ * Run a command and wait until it finishes.
+ *
+ * Windows:
+ *   npm.cmd is executed through the Windows shell.
+ *
+ * Linux/macOS:
+ *   npm is executed directly.
  */
 function runCommand(command, args, cwd) {
-  const child = spawn(command, args, {
-    cwd,
-    stdio: "inherit",
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd,
+      stdio: "inherit",
+      shell: process.platform === "win32",
+      windowsHide: false,
+    });
+
+    runningProcesses.push(child);
+
+    child.once("error", reject);
+
+    child.once("close", (code, signal) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+
+      let message = `${command} ${args.join(" ")} failed`;
+
+      if (code !== null) {
+        message += ` with exit code ${code}`;
+      }
+
+      if (signal) {
+        message += ` (${signal})`;
+      }
+
+      reject(new Error(message));
+    });
   });
-
-  processes.push(child);
-
-  child.on("error", (error) => {
-    console.error(`\n❌ Failed to start ${command}:`);
-    console.error(error.message);
-  });
-
-  return child;
 }
 
 /**
- * Run a command synchronously.
- *
- * Used for operations that must finish before
- * Devsmith continues.
+ * Start a long-running command.
  */
-function runCommandSync(command, args, cwd) {
-  execFileSync(command, args, {
+function startCommand(command, args, cwd) {
+  const child = spawn(command, args, {
     cwd,
     stdio: "inherit",
+    shell: process.platform === "win32",
+    windowsHide: false,
   });
+
+  runningProcesses.push(child);
+
+  child.once("error", (error) => {
+    console.error(
+      `\n❌ Failed to start ${command}: ${error.message}`
+    );
+  });
+
+  return child;
 }
 
 // --------------------------------------------------
@@ -78,42 +108,27 @@ function runCommandSync(command, args, cwd) {
 // --------------------------------------------------
 
 function openBrowser(url) {
-  let command;
-  let args;
+  const command =
+    process.platform === "win32"
+      ? "cmd.exe"
+      : process.platform === "darwin"
+        ? "open"
+        : "xdg-open";
 
-  switch (process.platform) {
-    case "win32":
-      /*
-       * `start` is a CMD builtin, so Windows needs
-       * cmd.exe here specifically.
-       */
-      command = "cmd.exe";
-      args = ["/c", "start", "", url];
-      break;
+  const args =
+    process.platform === "win32"
+      ? ["/c", "start", "", url]
+      : [url];
 
-    case "darwin":
-      command = "open";
-      args = [url];
-      break;
-
-    case "linux":
-      command = "xdg-open";
-      args = [url];
-      break;
-
-    default:
-      console.log(`\n🌐 Open ${url} in your browser.`);
-      return;
-  }
-
-  const browserProcess = spawn(command, args, {
+  const browser = spawn(command, args, {
     detached: true,
     stdio: "ignore",
+    windowsHide: true,
   });
 
-  browserProcess.unref();
+  browser.unref();
 
-  browserProcess.on("error", () => {
+  browser.once("error", () => {
     console.log(`\n🌐 Open ${url} in your browser.`);
   });
 }
@@ -170,17 +185,38 @@ await mkdir(backendDir, { recursive: true });
 
 console.log("\n📦 Downloading templates...\n");
 
-console.log("→ Downloading frontend...");
+try {
+  console.log("→ Downloading frontend...");
 
-await degit(frontendTemplates[frontend]).clone(frontendDir);
+  await degit(
+    frontendTemplates[frontend]
+  ).clone(frontendDir);
 
-console.log("✓ Frontend downloaded");
+  console.log("✓ Frontend downloaded");
 
-console.log("\n→ Downloading backend...");
+  console.log("\n→ Downloading backend...");
 
-await degit(backendTemplates[backend]).clone(backendDir);
+  await degit(
+    backendTemplates[backend]
+  ).clone(backendDir);
 
-console.log("✓ Backend downloaded");
+  console.log("✓ Backend downloaded");
+} catch (error) {
+  console.error("\n❌ Failed to download templates.\n");
+
+  console.error(error?.message ?? error);
+
+  console.error(`
+Devsmith could not download the required templates.
+
+Please check:
+  • Your internet connection
+  • GitHub availability
+  • The selected template
+`);
+
+  process.exit(1);
+}
 
 // --------------------------------------------------
 // Install Dependencies
@@ -189,7 +225,7 @@ console.log("✓ Backend downloaded");
 try {
   console.log("\n📥 Installing frontend dependencies...\n");
 
-  runCommandSync(
+  await runCommand(
     npmCommand,
     ["install"],
     frontendDir
@@ -199,7 +235,7 @@ try {
 
   console.log("\n📥 Installing backend dependencies...\n");
 
-  runCommandSync(
+  await runCommand(
     npmCommand,
     ["install"],
     backendDir
@@ -207,8 +243,25 @@ try {
 
   console.log("\n✓ Backend dependencies installed");
 } catch (error) {
-  console.error("\n❌ Failed to install dependencies.");
-  console.error("\nDevsmith stopped because dependency installation failed.");
+  console.error("\n❌ Failed to install dependencies.\n");
+
+  console.error(error?.message ?? error);
+
+  console.error(`
+Devsmith could not install the project dependencies.
+
+Devsmith does not require Administrator privileges
+to install dependencies inside your project directory.
+
+Try running:
+
+  npm install
+
+inside the affected project directory.
+
+If npm is not available, make sure Node.js and npm
+are installed and available in your PATH.
+`);
 
   process.exit(1);
 }
@@ -219,7 +272,7 @@ try {
 
 console.log("\n🚀 Starting backend...\n");
 
-const backendProcess = runCommand(
+const backendProcess = startCommand(
   npmCommand,
   ["run", "dev"],
   backendDir
@@ -231,7 +284,7 @@ const backendProcess = runCommand(
 
 console.log("\n🚀 Starting frontend...\n");
 
-const frontendProcess = runCommand(
+const frontendProcess = startCommand(
   npmCommand,
   ["run", "dev"],
   frontendDir
@@ -251,10 +304,18 @@ setTimeout(() => {
 // Shutdown
 // --------------------------------------------------
 
+let shuttingDown = false;
+
 function shutdown() {
+  if (shuttingDown) {
+    return;
+  }
+
+  shuttingDown = true;
+
   console.log("\n\n🛑 Shutting down Devsmith...\n");
 
-  for (const child of processes) {
+  for (const child of runningProcesses) {
     if (!child.killed) {
       child.kill();
     }
@@ -263,5 +324,25 @@ function shutdown() {
   process.exit(0);
 }
 
-process.on("SIGINT", shutdown);
-process.on("SIGTERM", shutdown);
+process.once("SIGINT", shutdown);
+process.once("SIGTERM", shutdown);
+
+// --------------------------------------------------
+// Process Exit Handling
+// --------------------------------------------------
+
+backendProcess.once("exit", (code) => {
+  if (!shuttingDown && code !== 0) {
+    console.error(
+      `\n❌ Backend stopped with exit code ${code}.`
+    );
+  }
+});
+
+frontendProcess.once("exit", (code) => {
+  if (!shuttingDown && code !== 0) {
+    console.error(
+      `\n❌ Frontend stopped with exit code ${code}.`
+    );
+  }
+});
