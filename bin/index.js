@@ -3,7 +3,7 @@
 import { select } from "@inquirer/prompts";
 import degit from "degit";
 import path from "node:path";
-import { mkdir } from "node:fs/promises";
+import { mkdir, access } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import process from "node:process";
 
@@ -85,6 +85,76 @@ function startCommand(command, args, cwd) {
 }
 
 // --------------------------------------------------
+// Validation
+// --------------------------------------------------
+
+async function fileExists(filePath) {
+  try {
+    await access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function validateTemplate(projectDir) {
+  console.log("\n🔍 Validating DevSmith template...\n");
+
+  const requiredFiles = [
+    "package.json",
+    "components.json",
+    "devsmith.config.ts",
+  ];
+
+  const missingFiles = [];
+
+  for (const file of requiredFiles) {
+    const exists = await fileExists(
+      path.join(projectDir, file)
+    );
+
+    if (exists) {
+      console.log(`✓ ${file}`);
+    } else {
+      console.log(`✗ ${file}`);
+      missingFiles.push(file);
+    }
+  }
+
+  const requiredDirectories = [
+    path.join("src", "app"),
+    path.join("src", "components"),
+    path.join("src", "components", "ui"),
+    path.join("src", "features"),
+  ];
+
+  for (const directory of requiredDirectories) {
+    const exists = await fileExists(
+      path.join(projectDir, directory)
+    );
+
+    if (exists) {
+      console.log(`✓ ${directory}/`);
+    } else {
+      console.log(`✗ ${directory}/`);
+      missingFiles.push(`${directory}/`);
+    }
+  }
+
+  if (missingFiles.length > 0) {
+    throw new Error(
+      `Template validation failed.\n\nMissing required files/directories:\n${missingFiles
+        .map((item) => `  • ${item}`)
+        .join("\n")}`
+    );
+  }
+
+  console.log("\n✓ Template validation passed");
+  console.log("✓ shadcn/ui configuration detected");
+  console.log("✓ DevSmith configuration detected");
+}
+
+// --------------------------------------------------
 // Editor
 // --------------------------------------------------
 
@@ -126,6 +196,9 @@ DevSmith is strictly built around:
   • TypeScript
   • Tailwind CSS
   • shadcn/ui
+
+Every DevSmith template is distributed as a
+fully configured and ready-to-use project.
 
 Choose a project type and DevSmith will assemble it for you.
 `);
@@ -234,6 +307,26 @@ Please check:
 }
 
 // --------------------------------------------------
+// Validate Template
+// --------------------------------------------------
+
+try {
+  await validateTemplate(projectDir);
+} catch (error) {
+  console.error("\n❌ Invalid DevSmith template.\n");
+  console.error(error?.message ?? error);
+
+  console.error(`
+The downloaded template does not satisfy
+DevSmith's template requirements.
+
+The project was not started.
+`);
+
+  process.exit(1);
+}
+
+// --------------------------------------------------
 // Install Dependencies
 // --------------------------------------------------
 
@@ -268,6 +361,20 @@ inside:
 }
 
 // --------------------------------------------------
+// shadcn/ui Status
+// --------------------------------------------------
+
+console.log(`
+✓ shadcn/ui is already initialized in the template.
+
+DevSmith will NOT run "shadcn init".
+
+You can use shadcn normally inside the generated project:
+
+  npx shadcn@latest add <component>
+`);
+
+// --------------------------------------------------
 // Start Development Server
 // --------------------------------------------------
 
@@ -285,9 +392,7 @@ const projectProcess = startCommand(
 
 const configFile = path.join(
   projectDir,
-  "src",
-  "data",
-  "config.ts"
+  "devsmith.config.ts"
 );
 
 setTimeout(() => {
@@ -308,6 +413,14 @@ Configuration:
 
 Development server:
   http://localhost:3000
+
+shadcn/ui:
+  Already initialized
+  Fully CLI-compatible
+
+You can add more shadcn components with:
+
+  npx shadcn@latest add <component>
 `);
 }, 1500);
 
@@ -325,7 +438,7 @@ function shutdown() {
   shuttingDown = true;
 
   console.log(
-    "\n\n🛑 Shutting down Devsmith...\n"
+    "\n\n🛑 Shutting down DevSmith...\n"
   );
 
   for (const child of runningProcesses) {
