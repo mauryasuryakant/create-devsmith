@@ -3,7 +3,7 @@
 import { select } from "@inquirer/prompts";
 import degit from "degit";
 import path from "node:path";
-import { mkdir, access } from "node:fs/promises";
+import { access } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import process from "node:process";
 
@@ -85,7 +85,7 @@ function startCommand(command, args, cwd) {
 }
 
 // --------------------------------------------------
-// Validation
+// File / Directory Validation
 // --------------------------------------------------
 
 async function fileExists(filePath) {
@@ -106,7 +106,14 @@ async function validateTemplate(projectDir) {
     "devsmith.config.ts",
   ];
 
-  const missingFiles = [];
+  const requiredDirectories = [
+    path.join("src", "app"),
+    path.join("src", "components"),
+    path.join("src", "components", "ui"),
+    path.join("src", "features"),
+  ];
+
+  const missingItems = [];
 
   for (const file of requiredFiles) {
     const exists = await fileExists(
@@ -117,16 +124,9 @@ async function validateTemplate(projectDir) {
       console.log(`✓ ${file}`);
     } else {
       console.log(`✗ ${file}`);
-      missingFiles.push(file);
+      missingItems.push(file);
     }
   }
-
-  const requiredDirectories = [
-    path.join("src", "app"),
-    path.join("src", "components"),
-    path.join("src", "components", "ui"),
-    path.join("src", "features"),
-  ];
 
   for (const directory of requiredDirectories) {
     const exists = await fileExists(
@@ -137,13 +137,13 @@ async function validateTemplate(projectDir) {
       console.log(`✓ ${directory}/`);
     } else {
       console.log(`✗ ${directory}/`);
-      missingFiles.push(`${directory}/`);
+      missingItems.push(`${directory}/`);
     }
   }
 
-  if (missingFiles.length > 0) {
+  if (missingItems.length > 0) {
     throw new Error(
-      `Template validation failed.\n\nMissing required files/directories:\n${missingFiles
+      `Template validation failed.\n\nMissing required files/directories:\n${missingItems
         .map((item) => `  • ${item}`)
         .join("\n")}`
     );
@@ -247,7 +247,7 @@ if (projectType === "portfolio") {
 }
 
 // --------------------------------------------------
-// Directories
+// Project Setup
 // --------------------------------------------------
 
 const root = process.cwd();
@@ -273,9 +273,29 @@ and configuration already prepared.
   process.exit(0);
 }
 
-const projectDir = path.join(root, "simple-portfolio");
+const projectDir = path.join(
+  root,
+  "simple-portfolio"
+);
 
-await mkdir(projectDir, { recursive: true });
+// --------------------------------------------------
+// Existing Project Protection
+// --------------------------------------------------
+
+if (await fileExists(projectDir)) {
+  console.error(`
+❌ Project directory already exists.
+
+  ${projectDir}
+
+DevSmith will not overwrite an existing project.
+
+Please remove or rename the existing directory
+before running DevSmith again.
+`);
+
+  process.exit(1);
+}
 
 // --------------------------------------------------
 // Download Template
@@ -314,6 +334,7 @@ try {
   await validateTemplate(projectDir);
 } catch (error) {
   console.error("\n❌ Invalid DevSmith template.\n");
+
   console.error(error?.message ?? error);
 
   console.error(`
@@ -368,6 +389,8 @@ console.log(`
 ✓ shadcn/ui is already initialized in the template.
 
 DevSmith will NOT run "shadcn init".
+
+The existing shadcn configuration will be preserved.
 
 You can use shadcn normally inside the generated project:
 
