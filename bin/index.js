@@ -3,44 +3,53 @@
 import { select } from "@inquirer/prompts";
 import degit from "degit";
 import path from "node:path";
-import { access } from "node:fs/promises";
+import { access, rm } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import process from "node:process";
 
-// --------------------------------------------------
-// Templates
-// --------------------------------------------------
-
 const templates = {
-  portfolio: {
-    basic:
-      "mauryasuryakant/devsmith-templates/full-stack/portfolio/simple-portfolio",
-  },
+  portfolio: "mauryasuryakant/devsmith-templates/full-stack/portfolio",
+  blog: "mauryasuryakant/devsmith-templates/full-stack/blog",
 };
 
-// --------------------------------------------------
-// Package Manager
-// --------------------------------------------------
+const themes = {
+  default: null,
+  claude: "https://tweakcn.com/r/themes/claude.json",
+  doom64: "https://tweakcn.com/r/themes/doom-64.json",
+  twitter: "https://tweakcn.com/r/themes/twitter.json",
+  vercel: "https://tweakcn.com/r/themes/vercel.json",
+  cyberpunk: "https://tweakcn.com/r/themes/cyberpunk.json",
+  mono: "https://tweakcn.com/r/themes/mono.json",
+  supabase: "https://tweakcn.com/r/themes/supabase.json",
+  retroArcade: "https://tweakcn.com/r/themes/retro-arcade.json",
+};
 
-const npmCommand =
-  process.platform === "win32" ? "npm.cmd" : "npm";
+const databases = {
+  mongodb: "mongodb",
+  supabase: "supabase",
+};
 
-// --------------------------------------------------
-// Process Management
-// --------------------------------------------------
-
+const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
 const runningProcesses = [];
 
-function runCommand(command, args, cwd) {
+function runCommand(command, args, cwd, input) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, {
       cwd,
-      stdio: "inherit",
+      stdio:
+        input === undefined
+          ? "inherit"
+          : ["pipe", "inherit", "inherit"],
       shell: process.platform === "win32",
       windowsHide: false,
     });
 
     runningProcesses.push(child);
+
+    if (input !== undefined && child.stdin) {
+      child.stdin.write(input);
+      child.stdin.end();
+    }
 
     child.once("error", reject);
 
@@ -84,10 +93,6 @@ function startCommand(command, args, cwd) {
   return child;
 }
 
-// --------------------------------------------------
-// File / Directory Validation
-// --------------------------------------------------
-
 async function fileExists(filePath) {
   try {
     await access(filePath);
@@ -116,9 +121,7 @@ async function validateTemplate(projectDir) {
   const missingItems = [];
 
   for (const file of requiredFiles) {
-    const exists = await fileExists(
-      path.join(projectDir, file)
-    );
+    const exists = await fileExists(path.join(projectDir, file));
 
     if (exists) {
       console.log(`✓ ${file}`);
@@ -143,9 +146,10 @@ async function validateTemplate(projectDir) {
 
   if (missingItems.length > 0) {
     throw new Error(
-      `Template validation failed.\n\nMissing required files/directories:\n${missingItems
-        .map((item) => `  • ${item}`)
-        .join("\n")}`
+      `Template validation failed.
+
+Missing required files/directories:
+${missingItems.map((item) => `  • ${item}`).join("\n")}`
     );
   }
 
@@ -154,15 +158,9 @@ async function validateTemplate(projectDir) {
   console.log("✓ DevSmith configuration detected");
 }
 
-// --------------------------------------------------
-// Editor
-// --------------------------------------------------
-
 function openEditor(filePath) {
   const editor =
-    process.env.VISUAL ||
-    process.env.EDITOR ||
-    "code";
+    process.env.VISUAL || process.env.EDITOR || "code";
 
   const editorProcess = spawn(editor, [filePath], {
     detached: true,
@@ -180,9 +178,27 @@ function openEditor(filePath) {
   });
 }
 
-// --------------------------------------------------
-// Welcome
-// --------------------------------------------------
+async function removeUnselectedDatabases(
+  projectDir,
+  selectedDatabase
+) {
+  const databaseDir = path.join(
+    projectDir,
+    "src",
+    "database"
+  );
+
+  const databaseOptions = ["mongodb", "supabase"];
+
+  for (const database of databaseOptions) {
+    if (database !== selectedDatabase) {
+      await rm(path.join(databaseDir, database), {
+        recursive: true,
+        force: true,
+      });
+    }
+  }
+}
 
 console.log(`
 ⚒️  Welcome to DevSmith!
@@ -203,84 +219,94 @@ fully configured and ready-to-use project.
 Choose a project type and DevSmith will assemble it for you.
 `);
 
-// --------------------------------------------------
-// Project Selection
-// --------------------------------------------------
-
 const projectType = await select({
   message: "What type of project do you want to build?",
   choices: [
     {
-      name: "Portfolio",
-      value: "portfolio",
+      name: "Blog",
+      value: "blog",
     },
     {
-      name: "Test Template",
-      value: "test-template",
+      name: "Portfolio",
+      value: "portfolio",
     },
   ],
 });
 
-// --------------------------------------------------
-// Portfolio Template Selection
-// --------------------------------------------------
+let selectedTheme = "default";
+let selectedDatabase = null;
 
-let templateType = null;
+selectedTheme = await select({
+  message: "Which theme do you prefer?",
+  choices: [
+    {
+      name: "Default Theme",
+      value: "default",
+    },
+    {
+      name: "Claude Theme",
+      value: "claude",
+    },
+    {
+      name: "Doom 64 Theme",
+      value: "doom64",
+    },
+    {
+      name: "Twitter Theme",
+      value: "twitter",
+    },
+    {
+      name: "Vercel Theme",
+      value: "vercel",
+    },
+    {
+      name: "Cyberpunk Theme",
+      value: "cyberpunk",
+    },
+    {
+      name: "Mono Theme",
+      value: "mono",
+    },
+    {
+      name: "Supabase Theme",
+      value: "supabase",
+    },
+    {
+      name: "Retro Arcade Theme",
+      value: "retroArcade",
+    },
+  ],
+});
 
-if (projectType === "portfolio") {
-  templateType = await select({
-    message: "Which portfolio template do you prefer?",
+if (projectType === "blog") {
+  selectedDatabase = await select({
+    message: "Which database do you prefer?",
     choices: [
       {
-        name: "Blank",
-        value: "blank",
-        description:
-          "Routes + configuration, ready to build on",
+        name: "MongoDB",
+        value: "mongodb",
       },
       {
-        name: "Basic Template",
-        value: "basic",
-        description: "Minimal UI for a portfolio",
+        name: "Supabase",
+        value: "supabase",
       },
     ],
   });
 }
 
-// --------------------------------------------------
-// Project Setup
-// --------------------------------------------------
-
 const root = process.cwd();
-
-if (projectType === "test-template") {
-  console.log(`
-🧪 Test Template is not available yet.
-
-Thanks for testing DevSmith!
-`);
-
-  process.exit(0);
-}
-
-if (templateType === "blank") {
-  console.log(`
-🚧 Blank Portfolio is not available yet.
-
-Coming soon: a blank project with all routes
-and configuration already prepared.
-`);
-
-  process.exit(0);
-}
 
 const projectDir = path.join(
   root,
-  "simple-portfolio"
+  projectType === "blog" ? "blog" : "portfolio"
 );
 
-// --------------------------------------------------
-// Existing Project Protection
-// --------------------------------------------------
+const template = templates[projectType];
+
+if (!template) {
+  console.error("\n❌ Invalid project type.\n");
+  process.exit(1);
+}
 
 if (await fileExists(projectDir)) {
   console.error(`
@@ -297,59 +323,72 @@ before running DevSmith again.
   process.exit(1);
 }
 
-// --------------------------------------------------
-// Download Template
-// --------------------------------------------------
-
-console.log("\n📦 Downloading portfolio template...\n");
+console.log(
+  `\n📦 Downloading ${projectType} template...\n`
+);
 
 try {
-  await degit(
-    templates.portfolio.basic
-  ).clone(projectDir);
+  await degit(template).clone(projectDir);
 
-  console.log("✓ Portfolio template downloaded");
+  console.log(
+    `✓ ${projectType === "blog" ? "Blog" : "Portfolio"} template downloaded`
+  );
 } catch (error) {
-  console.error("\n❌ Failed to download the template.\n");
+  console.error(
+    "\n❌ Failed to download the template.\n"
+  );
 
-  console.error(error?.message ?? error);
-
-  console.error(`
-DevSmith could not download the selected template.
-
-Please check:
-  • Your internet connection
-  • GitHub availability
-  • The selected template
-`);
+  console.error(
+    error instanceof Error ? error.message : error
+  );
 
   process.exit(1);
 }
-
-// --------------------------------------------------
-// Validate Template
-// --------------------------------------------------
 
 try {
   await validateTemplate(projectDir);
 } catch (error) {
-  console.error("\n❌ Invalid DevSmith template.\n");
+  console.error(
+    "\n❌ Invalid DevSmith template.\n"
+  );
 
-  console.error(error?.message ?? error);
+  console.error(
+    error instanceof Error ? error.message : error
+  );
 
-  console.error(`
-The downloaded template does not satisfy
-DevSmith's template requirements.
-
-The project was not started.
-`);
+  console.error("\nThe project was not started.\n");
 
   process.exit(1);
 }
 
-// --------------------------------------------------
-// Install Dependencies
-// --------------------------------------------------
+if (selectedDatabase) {
+  try {
+    console.log("\n🗄️ Configuring database...\n");
+
+    await removeUnselectedDatabases(
+      projectDir,
+      databases[selectedDatabase]
+    );
+
+    console.log(
+      `✓ ${
+        selectedDatabase === "mongodb"
+          ? "MongoDB"
+          : "Supabase"
+      } selected`
+    );
+  } catch (error) {
+    console.error(
+      "\n❌ Failed to configure the database.\n"
+    );
+
+    console.error(
+      error instanceof Error ? error.message : error
+    );
+
+    process.exit(1);
+  }
+}
 
 try {
   console.log("\n📥 Installing dependencies...\n");
@@ -362,56 +401,61 @@ try {
 
   console.log("\n✓ Dependencies installed");
 } catch (error) {
-  console.error("\n❌ Failed to install dependencies.\n");
+  console.error(
+    "\n❌ Failed to install dependencies.\n"
+  );
 
-  console.error(error?.message ?? error);
-
-  console.error(`
-DevSmith could not install the project dependencies.
-
-Try running:
-
-  npm install
-
-inside:
-
-  ${projectDir}
-`);
+  console.error(
+    error instanceof Error ? error.message : error
+  );
 
   process.exit(1);
 }
 
-// --------------------------------------------------
-// shadcn/ui Status
-// --------------------------------------------------
+if (themes[selectedTheme]) {
+  try {
+    console.log(
+      `\n🎨 Installing ${selectedTheme} theme...\n`
+    );
 
-console.log(`
-✓ shadcn/ui is already initialized in the template.
+    await runCommand(
+      npmCommand,
+      [
+        "exec",
+        "--",
+        "shadcn@latest",
+        "add",
+        themes[selectedTheme],
+      ],
+      projectDir,
+      "y\n"
+    );
 
-DevSmith will NOT run "shadcn init".
+    console.log("\n✓ Theme installed");
+  } catch (error) {
+    console.error(
+      "\n❌ Failed to install the theme.\n"
+    );
 
-The existing shadcn configuration will be preserved.
+    console.error(
+      error instanceof Error ? error.message : error
+    );
 
-You can use shadcn normally inside the generated project:
+    process.exit(1);
+  }
+} else {
+  console.log("\n✓ Default theme selected");
+}
 
-  npx shadcn@latest add <component>
-`);
-
-// --------------------------------------------------
-// Start Development Server
-// --------------------------------------------------
-
-console.log("\n🚀 Starting development server...\n");
+console.log(
+  "\n🚀 Starting development server...\n"
+);
 
 const projectProcess = startCommand(
   npmCommand,
   ["run", "dev"],
   projectDir
 );
-
-// --------------------------------------------------
-// Open Configuration File
-// --------------------------------------------------
 
 const configFile = path.join(
   projectDir,
@@ -431,25 +475,37 @@ setTimeout(() => {
 Project:
   ${projectDir}
 
-Configuration:
+Template:
+  ${projectType}
+
+Theme:
+  ${
+    selectedTheme === "retroArcade"
+      ? "Retro Arcade"
+      : selectedTheme === "supabase"
+        ? "Supabase"
+        : selectedTheme.charAt(0).toUpperCase() +
+          selectedTheme.slice(1)
+  }
+
+${
+  selectedDatabase
+    ? `Database:
+  ${
+    selectedDatabase === "mongodb"
+      ? "MongoDB"
+      : "Supabase"
+  }
+
+`
+    : ""
+}Configuration:
   ${configFile}
 
 Development server:
   http://localhost:3000
-
-shadcn/ui:
-  Already initialized
-  Fully CLI-compatible
-
-You can add more shadcn components with:
-
-  npx shadcn@latest add <component>
 `);
 }, 1500);
-
-// --------------------------------------------------
-// Shutdown
-// --------------------------------------------------
 
 let shuttingDown = false;
 
@@ -475,10 +531,6 @@ function shutdown() {
 
 process.once("SIGINT", shutdown);
 process.once("SIGTERM", shutdown);
-
-// --------------------------------------------------
-// Process Exit Handling
-// --------------------------------------------------
 
 projectProcess.once("exit", (code) => {
   if (!shuttingDown && code !== 0) {
