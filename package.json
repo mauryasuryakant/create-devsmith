@@ -19,6 +19,6 @@
   "license": "MIT",
   "dependencies": {
     "@inquirer/prompts": "^7.8.4",
-    "degit": "^2.8.4"
+    "degit": "^3.8.0"
   }
 }
