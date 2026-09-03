@@ -1,0 +1,1 @@
+Always remember to check for new versions and update package.json
